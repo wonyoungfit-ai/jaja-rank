@@ -1,0 +1,41 @@
+name: Mirror charrank.php
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'   # 30분마다
+  workflow_dispatch:          # "Run workflow" 버튼으로 수동 실행도 가능
+
+permissions:
+  contents: write
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch charrank.php
+        run: |
+          curl -sL \
+            -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36" \
+            -H "Accept: text/html,application/xhtml+xml,*/*;q=0.8" \
+            -H "Accept-Language: ko-KR,ko;q=0.9" \
+            "https://sa000001.com/sa2/info/charrank.php" -o charrank.html
+
+      - name: Sanity-check content
+        run: |
+          if ! grep -q "전투력" charrank.html; then
+            echo "::error::charrank.html looks wrong (no '전투력' found) — site may have changed or blocked us"
+            exit 1
+          fi
+
+      - name: Record fetch time
+        run: date -u "+%Y-%m-%d %H:%M UTC" > charrank_time.txt
+
+      - name: Commit if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add charrank.html charrank_time.txt
+          git diff --cached --quiet || git commit -m "Update charrank mirror"
+          git push
