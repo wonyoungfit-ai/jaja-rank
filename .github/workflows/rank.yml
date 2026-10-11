@@ -14,9 +14,41 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download rank page
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Playwright (headless browser)
         run: |
-          curl -sf -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36" "https://sa000001.com/sa2/info/petrank.php" -o petrank.html
+          pip install playwright
+          playwright install --with-deps chromium
+
+      - name: Download rank page via headless browser
+        run: |
+          cat > _fetch_rank.py <<'PYEOF'
+          import sys
+          from playwright.sync_api import sync_playwright
+
+          URL = "https://sa000001.com/sa2/info/petrank.php"
+          UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+
+          with sync_playwright() as p:
+              browser = p.chromium.launch()
+              page = browser.new_page(user_agent=UA, locale="ko-KR")
+              page.goto(URL, wait_until="networkidle", timeout=30000)
+              html = page.content()
+              browser.close()
+
+          if not any(k in html for k in ("보유 1등", "랭킹페트", "종합 랭킹")):
+              print("::error::petrank.html looks wrong — site may have changed or blocked us")
+              sys.exit(1)
+
+          with open("petrank.html", "w", encoding="utf-8") as f:
+              f.write(html)
+          PYEOF
+          python3 _fetch_rank.py
+          rm -f _fetch_rank.py
           wc -c petrank.html
 
       - name: Commit if changed
