@@ -1,6 +1,8 @@
 name: Fetch Pet Rank
 
 "on":
+  schedule:
+    - cron: '*/30 * * * *'
   workflow_dispatch:
 
 permissions:
@@ -12,48 +14,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Install Playwright (headless browser)
+      - name: Download rank page
         run: |
-          pip install playwright
-          playwright install --with-deps chromium
+          curl -sf -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36" "https://sa000001.com/sa2/info/petrank.php" -o petrank.html
+          wc -c petrank.html
 
-      - name: DEBUG fetch rank page
+      - name: Commit if changed
         run: |
-          cat > _debug_fetch.py <<'PYEOF'
-          from playwright.sync_api import sync_playwright
-
-          URL = "https://sa000001.com/sa2/info/petrank.php"
-          UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-                "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
-
-          with sync_playwright() as p:
-              browser = p.chromium.launch()
-              page = browser.new_page(user_agent=UA, locale="ko-KR")
-              resp = page.goto(URL, wait_until="networkidle", timeout=30000)
-              print("STATUS:", resp.status if resp else None)
-              print("TITLE:", page.title())
-              page.screenshot(path="debug_screenshot.png", full_page=True)
-              html = page.content()
-              browser.close()
-
-          print("LEN:", len(html))
-          print("----- SNIPPET START -----")
-          print(html[:1500])
-          print("----- SNIPPET END -----")
-
-          with open("debug_petrank.html", "w", encoding="utf-8") as f:
-              f.write(html)
-          PYEOF
-          python3 _debug_fetch.py
-
-      - name: Upload debug artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: debug-output
-          path: |
-            debug_screenshot.png
-            debug_petrank.html
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          date -u +'%Y-%m-%d %H:%M UTC' > petrank_time.txt
+          git add petrank.html petrank_time.txt
+          if git diff --staged --quiet; then
+            echo "no change"
+            exit 0
+          fi
+          git commit -m "rank update"
+          git push
