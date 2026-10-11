@@ -14,13 +14,36 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Fetch charrank.php
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Playwright (headless browser)
         run: |
-          curl -sL \
-            -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36" \
-            -H "Accept: text/html,application/xhtml+xml,*/*;q=0.8" \
-            -H "Accept-Language: ko-KR,ko;q=0.9" \
-            "https://sa000001.com/sa2/info/charrank.php" -o charrank.html
+          pip install playwright
+          playwright install --with-deps chromium
+
+      - name: Fetch charrank.php via headless browser
+        run: |
+          cat > _fetch_charrank.py <<'PYEOF'
+          from playwright.sync_api import sync_playwright
+
+          URL = "https://sa000001.com/sa2/info/charrank.php"
+          UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+
+          with sync_playwright() as p:
+              browser = p.chromium.launch()
+              page = browser.new_page(user_agent=UA, locale="ko-KR")
+              page.goto(URL, wait_until="networkidle", timeout=30000)
+              html = page.content()
+              browser.close()
+
+          with open("charrank.html", "w", encoding="utf-8") as f:
+              f.write(html)
+          PYEOF
+          python3 _fetch_charrank.py
+          rm -f _fetch_charrank.py
 
       - name: Sanity-check content
         run: |
